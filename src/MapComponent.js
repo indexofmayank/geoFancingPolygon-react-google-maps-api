@@ -1,33 +1,68 @@
-import React, { useRef } from 'react';
-import html2canvas from 'html2canvas';
+import React, { useState, useCallback } from 'react';
+import { GoogleMap, LoadScript, Polygon, DrawingManager } from '@react-google-maps/api';
 
-const MapComponent = () => {
-  const divRef = useRef(null);
+const containerStyle = {
+  width: '100%',
+  height: '400px',
+};
 
-  const captureScreenshot = () => {
-    if (divRef.current) {
-      html2canvas(divRef.current).then((canvas) => {
-        // Create an image element and set the src to the canvas data URL
-        const img = document.createElement('img');
-        img.src = canvas.toDataURL('image/png');
+const center = {
+  lat: 19.44631570599095, // Example latitude
+  lng: 72.79798501456031, // Example longitude
+};
 
-        // Create a link element to download the image
-        const link = document.createElement('a');
-        link.href = img.src;
-        link.download = 'screenshot.png';
-        link.click();
-      });
-    }
+const MapComponent = ({ onPolygonComplete }) => {
+  const [polygons, setPolygons] = useState([]);
+
+  const handlePolygonComplete = useCallback((polygon) => {
+    const path = polygon.getPath().getArray().map(latLng => ({
+      lat: latLng.lat(),
+      lng: latLng.lng(),
+    }));
+    setPolygons([...polygons, path]);
+    onPolygonComplete(path);
+    polygon.setMap(null); // Remove the polygon from the drawing manager
+  }, [polygons, onPolygonComplete]);
+
+  const handleLoad = (map) => {
+    const drawingManagerOptions = {
+      drawingControl: true,
+      drawingControlOptions: {
+        position: window.google.maps.ControlPosition.TOP_CENTER,
+        drawingModes: ['polygon'],
+      },
+    };
+
+    const drawingManager = new window.google.maps.drawing.DrawingManager(drawingManagerOptions);
+    drawingManager.setMap(map);
+
+    window.google.maps.event.addListener(drawingManager, 'polygoncomplete', handlePolygonComplete);
   };
 
+  const isPointInPolygon = (latLng, polygon) => {
+    const googlePolygon = new window.google.maps.Polygon({ paths: polygon });
+    return window.google.maps.geometry.poly.containsLocation(latLng, googlePolygon);
+  };
+
+  // Example usage
+  const checkPoint = { lat: 19.070062970612454, lng: 72.8427992642967 }; // Replace with the point you want to check
+  const isInside = polygons.some(polygon => isPointInPolygon(new window.google.maps.LatLng(checkPoint.lat, checkPoint.lng), polygon));
+
+  console.log('Is the point inside any polygon?', isInside);
+
   return (
-    <div>
-      <div ref={divRef} style={{ padding: '20px', backgroundColor: '#f0f0f0', border: '1px solid #ccc' }}>
-        <h1>Capture This Div</h1>
-        <p>This content will be captured in the screenshot.</p>
-      </div>
-      <button onClick={captureScreenshot}>Capture Screenshot</button>
-    </div>
+    <LoadScript googleMapsApiKey="AIzaSyChe49SyZJZYPXiyZEey4mvgqxO1lagIqQ" libraries={['drawing', 'geometry']}>
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={center}
+        zoom={12}
+        onLoad={handleLoad}
+      >
+        {polygons.map((polygon, index) => (
+          <Polygon key={index} paths={polygon} options={{ fillColor: '#FF0000', fillOpacity: 0.5 }} />
+        ))}
+      </GoogleMap>
+    </LoadScript>
   );
 };
 
